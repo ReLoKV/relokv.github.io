@@ -1,0 +1,18 @@
+field,type,unit,description,missing_value_policy
+run_id,string,none,Release-local independent run identifier,Required
+request_id,string,none,Release-local request identifier unique within a run,Required
+session_id,string,none,Remapped session identifier without a private identity mapping,Required for session analysis
+arrival_rel_ms,number,ms,Arrival relative to the replay origin,Required
+model_id,string,none,Base model and version identifier in the release manifest,Required
+adapter_id,string,none,Adapter and version identifier in the release manifest,Required
+input_tokens,integer,token,Actual input length after the pinned tokenizer and template,Required
+output_tokens,integer,token,Number of generated output tokens,Record actual value including partial output
+matched_prefix_tokens,integer,token,Length of a legal continuous exact prefix,Required for reuse analysis
+memory_budget_mib,number,MiB,Physical budget with scope defined by the run manifest,Required
+ttft_ms,number,ms,Request arrival to the first generated token,Missing if no first token was produced
+mean_itl_ms,number,ms,Mean interval between generated tokens for this request,Missing if fewer than two tokens were generated
+peak_memory_mib,number,MiB,Peak physical memory with measurement scope defined by the manifest,Missing if unmeasured
+preparation_id,string,none,Link to a deduplicated preparation event if applicable,Missing when not applicable
+prepared_before_arrival,boolean,none,Whether the matching target state was prepared before arrival,Missing if not evaluated
+prepared_state_consumed,boolean,none,Whether the request actually consumed the matching prepared state,Missing if not evaluated
+status,string,none,Request outcome such as success timeout error or cancelled,Required

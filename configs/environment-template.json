@@ -1,0 +1,56 @@
+{
+  "artifact_version": "0.1",
+  "kind": "metadata-template",
+  "description": "An inventory for recording validated experiments. Not an executable ReLoKV configuration. Null values are unfilled fields, not defaults.",
+  "device": {
+    "model": null,
+    "physical_memory_mib": null,
+    "power_mode": null,
+    "clock_policy": null,
+    "thermal_conditions": null
+  },
+  "software": {
+    "operating_system": null,
+    "jetpack": null,
+    "cuda": null,
+    "driver": null,
+    "inference_backend": null,
+    "backend_revision": null,
+    "build_flags": []
+  },
+  "model": {
+    "checkpoint": null,
+    "checkpoint_hash": null,
+    "weight_precision": null,
+    "tokenizer_revision": null,
+    "chat_template_revision": null,
+    "context_limit_tokens": null
+  },
+  "adapters": {
+    "manifest": null,
+    "count": null,
+    "base_compatibility_verified": null
+  },
+  "workload": {
+    "manifest": null,
+    "source_versions": [],
+    "split_boundaries": null,
+    "request_order_hash": null,
+    "generation_settings": null
+  },
+  "budget": {
+    "total_physical_memory_mib": null,
+    "memory_accounting_scope": null,
+    "max_background_work": null,
+    "background_work_unit": null
+  },
+  "measurement": {
+    "ttft_boundary": "request arrival to first generated token",
+    "memory_scope": null,
+    "energy_boundary": null,
+    "failure_accounting": null,
+    "independent_process_replays": null,
+    "predictor_training_seeds": [],
+    "acceptance_criteria": null
+  }
+}

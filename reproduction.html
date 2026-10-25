@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Experimental reproduction requirements and measurement boundaries for ReLoKV.">
+  <meta name="referrer" content="no-referrer">
+  <title>Reproducing the Experiments | ReLoKV</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <a id="skip-to-content" href="#content">Skip to the content.</a>
+  <header class="page-header">
+    <h1 class="project-name reproduction-title">ReLoKV: Reproducing the Experiments</h1>
+  </header>
+  <main id="content" class="main-content">
+    <p><a href="index.html">Back to experimental materials</a></p>
+    <nav aria-labelledby="table-of-contents">
+      <h2 id="table-of-contents">Table of Contents</h2>
+      <p><a href="#protocol">Measurement Protocol</a></p>
+      <p><a href="#e01-e03">E01&ndash;E03: Workloads and Baselines</a></p>
+      <p><a href="#e04-e06">E04&ndash;E06: Prediction and Effective Preparation</a></p>
+      <p><a href="#e07-e09">E07&ndash;E09: Grouping, Anchors, and Deltas</a></p>
+      <p><a href="#e10-e12">E10&ndash;E12: Lifecycle and Cache Management</a></p>
+      <p><a href="#e13-e15">E13&ndash;E15: Background Execution</a></p>
+      <p><a href="#e16-e18">E16&ndash;E18: End-to-End Evaluation</a></p>
+      <p><a href="#e19-e20">E19&ndash;E20: Quality, Energy, and Correctness</a></p>
+    </nav>
+
+    <section id="protocol">
+      <h2>Measurement Protocol</h2>
+      <p>This page describes the reproduction requirements for the experimental groups. Runnable implementations, commands, checkpoints, traces, and measured outputs are not included in the current release.</p>
+      <ol>
+        <li>Record device settings, runtime revision, base model, tokenizer, prompt template, adapter versions, and generation settings for every run. The <a href="configs/environment-template.json" download>environment inventory template</a> lists the required metadata.</li>
+        <li>Fix request inputs and order, physical-byte budgets, and maximum background-work budgets across comparable methods. Preserve version checks and recovery dependencies in every valid policy.</li>
+        <li>Measure TTFT from request arrival to the first generated token. Distinguish backend stage timing from complete service latency. Record earlier preparation and its interference separately.</li>
+        <li>Include anchors, deltas, complete KV, metadata, and workspaces in physical-memory accounting. Do not sum overlapping stage durations as wall-clock latency.</li>
+        <li>Record independent process replays and predictor training seeds separately. The initial evaluation plan uses at least three process replays for representative configurations and three predictor seeds, with repetition adjusted by observed variability.</li>
+        <li>Retain failed, timed-out, and crashed runs. Missing values are not zero. Assess uncertainty using users, traces, or independent runs rather than treating correlated requests as independent users.</li>
+        <li>Provide input manifests, actual commands, expected output files, plotting scripts, and validation criteria with each executable release. Label reimplementations of related mechanisms explicitly.</li>
+      </ol>
+    </section>
+
+    <section id="e01-e03">
+      <h2>E01&ndash;E03: Workloads and Baselines</h2>
+      <ul>
+        <li><strong>E01:</strong> document behavior and text sources, task/adapter mappings, document deduplication, and user/time split boundaries.</li>
+        <li><strong>E02:</strong> check conversation-history append behavior, negative reuse cases, return intervals, and whether future records change earlier decisions.</li>
+        <li><strong>E03:</strong> pin the environment and verify no-reuse and exact same-LoRA prefix baselines against recomputation.</li>
+      </ul>
+      <p>Expected outputs include workload statistics, token and return-distance distributions, an environment manifest, baseline correctness checks, and timing-boundary definitions.</p>
+    </section>
+
+    <section id="e04-e06">
+      <h2>E04&ndash;E06: Prediction and Effective Preparation</h2>
+      <ul>
+        <li><strong>E04:</strong> compare simple and learned predictors under the same visible history, including switch-only samples, time-order diagnostics, and online overhead.</li>
+        <li><strong>E05:</strong> compare demand-only preparation, adapter-only preload, and adapter plus legal historical-KV recovery with fixed state-management rules.</li>
+        <li><strong>E06:</strong> vary candidate counts, preparation windows, budgets, and controlled prediction errors; record wasted work and foreground interference.</li>
+      </ul>
+      <p>Expected outputs include Top-k/MRR summaries, split and checkpoint metadata, request-level coverage, preparation-to-consumption event links, cancellation and expiry, and TTFT/ITL measurements.</p>
+      <p>Predicting an adapter is not a KV hit. The candidate must pass session, exact-prefix, dependency, version, readiness, and consumption checks. Oracle permissions must be explicit; future new text is not available by default.</p>
+    </section>
+
+    <section id="e07-e09">
+      <h2>E07&ndash;E09: Grouping, Anchors, and Deltas</h2>
+      <ul>
+        <li><strong>E07:</strong> compare grouping schemes under matched requests and budgets, estimating relations and structure from training/calibration data only.</li>
+        <li><strong>E08:</strong> vary anchor selection while holding grouping and request order fixed; record the adapter-pair sampling plan.</li>
+        <li><strong>E09:</strong> compare complete KV, direct complete-KV quantization, and anchor-delta representations at comparable task quality.</li>
+      </ul>
+      <p>Expected outputs include separate K/V error distributions, search overhead, recovery success, construction and restoration times, full-family storage, temporary peaks, and downstream quality.</p>
+      <p>First-construction costs include the real target KV and any extra prefill. High cosine similarity alone does not establish equivalent output quality.</p>
+    </section>
+
+    <section id="e10-e12">
+      <h2>E10&ndash;E12: Lifecycle and Cache Management</h2>
+      <ul>
+        <li><strong>E10:</strong> verify actual transitions between complete and compressed states, host-side availability, and restored GPU-ready states.</li>
+        <li><strong>E11:</strong> compare blocks, leaf eviction, session paths, family dependency closure, and joint management under the same physical budgets.</li>
+        <li><strong>E12:</strong> ablate prediction, frequency, dependency impact, and preparation-cost scoring; tune on validation data and lock test parameters.</li>
+      </ul>
+      <p>Expected outputs include usable continuous-prefix coverage, actually released bytes, metadata and restoration peaks, dependency audits, eviction/cancellation records, and latency.</p>
+      <p>Dependency protection remains enabled. Shared parent memory is counted once. Include cases where a cold anchor supports hot children rather than requiring an entire family to remain resident.</p>
+    </section>
+
+    <section id="e13-e15">
+      <h2>E13&ndash;E15: Background Execution</h2>
+      <ul>
+        <li><strong>E13:</strong> separate kernel fusion, multilayer task organization, and transfer effects in local benchmarks before integration.</li>
+        <li><strong>E14:</strong> compare serial work, stream organization, layerwise recovery, and load-aware deferral under idle, prefill-heavy, decode-heavy, and bursty conditions.</li>
+        <li><strong>E15:</strong> compare serial and adapter-aware batches with matched request sets, ordering semantics, and memory budgets.</li>
+      </ul>
+      <p>Expected outputs include CUDA event timelines, host wall-clock timings, synchronization and waiting, foreground slowdown, background backlog, invalid preparation, memory peaks, and energy.</p>
+      <p>Real inference results are needed to establish overlap benefits. Stream priority does not guarantee preemption or freedom from bandwidth contention.</p>
+    </section>
+
+    <section id="e16-e18">
+      <h2>E16&ndash;E18: End-to-End Evaluation</h2>
+      <ul>
+        <li><strong>E16:</strong> replay sequential and parallel workloads against strong baselines at representative physical-memory budgets.</li>
+        <li><strong>E17:</strong> remove modules separately and evaluate interactions among prediction, joint KV management, and asynchronous execution.</li>
+        <li><strong>E18:</strong> vary adapter count, context length, return distance, switch probability, arrival rate, and preparation budget in representative stress cases.</li>
+      </ul>
+      <p>Expected outputs include TTFT/ITL distributions, throughput, physical peaks, energy, quality, failure rates, SLO outcomes, and run-level paired comparisons.</p>
+      <p>Include low-reuse and wrong-prediction conditions. Distinguish original implementations from mechanism reimplementations.</p>
+    </section>
+
+    <section id="e19-e20">
+      <h2>E19&ndash;E20: Quality, Energy, and Correctness</h2>
+      <ul>
+        <li><strong>E19:</strong> compare exact reuse and restored states with the same target adapter's original full KV using logit, task-quality, and output checks with recorded tolerances.</li>
+        <li><strong>E20:</strong> record sustained-run power, temperature, backlog, leaks, errors, and completion outcomes; exercise version changes, anchor eviction, cancellation, bursts, and buffer synchronization.</li>
+      </ul>
+      <p>Expected outputs include quality-space-latency comparisons, paired uncertainty, total and explicitly defined idle-adjusted energy, and directed correctness reports.</p>
+      <p>Acceptance criteria are chosen before testing. Non-significance does not establish equivalence. Energy measurements specify whether foreground work, background work, and waiting are included.</p>
+    </section>
+
+    <footer class="site-footer">
+      <span>ReLoKV experimental materials.</span>
+      <a href="index.html">Back to experimental materials</a>
+    </footer>
+  </main>
+</body>
+</html>

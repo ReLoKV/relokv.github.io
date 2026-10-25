@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Experimental materials and evaluation for ReLoKV.">
+  <meta name="referrer" content="no-referrer">
+  <title>relokv.github.io</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <a id="skip-to-content" href="#content">Skip to the content.</a>
+
+  <header class="page-header">
+    <h1 class="project-name">relokv.github.io</h1>
+  </header>
+
+  <main id="content" class="main-content">
+    <p class="site-title">Dependency-Aware Multi-LoRA KV Management for On-Device Task Switching</p>
+    <p class="site-subtitle">Experimental Materials</p>
+
+    <p class="badges" aria-label="Artifact information">
+      <span class="badge"><span class="badge-label">Platform</span><span class="badge-value platform">Jetson AGX</span></span>
+      <span class="badge"><span class="badge-label">Status</span><span class="badge-value preparation">Experiments in progress</span></span>
+    </p>
+
+    <nav aria-labelledby="table-of-contents">
+      <h2 id="table-of-contents">Table of Contents</h2>
+      <p><a href="#introduction">Introduction</a></p>
+      <p><a href="#workloads">Workloads and Data Preparation</a></p>
+      <p><a href="#experimental-setup">Experimental Setup</a></p>
+      <p><a href="#prediction">Prediction and Preparation</a></p>
+      <p><a href="#kv-representation">Cross-LoRA KV Representation</a></p>
+      <p><a href="#kv-management">KV Management Policies</a></p>
+      <p><a href="#background-execution">Background Execution</a></p>
+      <p><a href="#end-to-end">End-to-End Evaluation and Ablations</a></p>
+      <p><a href="#quality-energy">Quality, Energy, and Correctness</a></p>
+      <p><a href="#artifacts">Experimental Artifacts</a></p>
+    </nav>
+
+    <h2 id="introduction">Introduction</h2>
+    <p>This page documents the experimental workloads, configurations, comparisons, and measurements for ReLoKV. The evaluation studies whether task-return prediction, cross-LoRA KV representations, dependency-aware cache management, and background execution can reduce repeated prefill and memory pressure on resource-constrained devices.</p>
+    <p>The experiments are designed to distinguish an adapter prediction from a reusable session, a legal exact-prefix match, a prepared KV state, and a state actually consumed by a request. These are separate events and are reported separately. This site contains experimental materials only; it does not host the manuscript or describe the full system design.</p>
+
+    <h2 id="workloads">Workloads and Data Preparation</h2>
+    <p>We study two complementary workload patterns:</p>
+    <p>1) <strong>Sequential conversations:</strong> a session grows over multiple turns, is interrupted by other tasks, and may later be revisited. Requests preserve the chronological conversation history.</p>
+    <p>2) <strong>Parallel document tasks:</strong> different compatible LoRA adapters process tasks derived from a shared source document, with non-consecutive returns to earlier tasks.</p>
+    <p>Behavior traces and text content are constructed separately. Mobile application traces provide temporal order; dialogue or document datasets provide request text. App-to-task, task-to-adapter, and session mappings are experimental annotations, not native labels supplied by those datasets. The selected dataset versions, filtering rules, mapping procedure, and licenses will be recorded with each release.</p>
+    <p>Train, validation, and test partitions follow user and time boundaries. Text is deduplicated by source conversation or document before partitioning. The test period is not used to construct transition statistics, choose anchors, tune thresholds, or select model checkpoints. Workloads include negative cases such as new sessions, incompatible adapters, changed prefixes, low-reuse periods, and long return intervals.</p>
+
+    <h3 id="workload-statistics">Workload Statistics</h3>
+    <p>Each workload release will report the number of users, sessions, requests, tasks, and adapters; input and output token distributions; session-return intervals; adapter-switch rates; exact-prefix opportunities; and the fraction of requests with a known prior session. These statistics are reported separately for natural traces and controlled sensitivity workloads.</p>
+    <div class="table-scroll" role="region" aria-label="Request-level measurement fields" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Field</th><th scope="col">Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>run_id</code></td><td>Identifier of an independent replay or evaluation run.</td></tr>
+          <tr><td><code>request_id</code></td><td>Request identifier, unique within a run.</td></tr>
+          <tr><td><code>session_id</code></td><td>Pseudonymous session identifier; the identity mapping is not released.</td></tr>
+          <tr><td><code>arrival_rel_ms</code></td><td>Request arrival time relative to the replay start, in milliseconds.</td></tr>
+          <tr><td><code>model_id</code>, <code>adapter_id</code></td><td>Base model and LoRA adapter versions recorded in the run manifest.</td></tr>
+          <tr><td><code>input_tokens</code>, <code>output_tokens</code></td><td>Tokenized input length and generated output length under the recorded tokenizer and prompt template.</td></tr>
+          <tr><td><code>matched_prefix_tokens</code></td><td>Length of the legal, continuous exact prefix available for reuse.</td></tr>
+          <tr><td><code>prepared_before_arrival</code></td><td>Whether the matching target state was ready before request arrival.</td></tr>
+          <tr><td><code>prepared_state_consumed</code></td><td>Whether the request actually consumed that prepared state.</td></tr>
+          <tr><td><code>ttft_ms</code>, <code>mean_itl_ms</code></td><td>Time to first token and mean inter-token latency.</td></tr>
+          <tr><td><code>peak_memory_mib</code></td><td>Peak physical memory with the measurement scope specified in the run manifest.</td></tr>
+          <tr><td><code>status</code></td><td>Outcome including success, timeout, error, and cancellation.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Preparation events, including creation, completion, expiry, cancellation, and consumption, are recorded separately and linked to requests by preparation identifiers. Failed and timed-out requests remain in the accounting. Missing measurements are not encoded as zero.</p>
+
+    <h2 id="experimental-setup">Experimental Setup</h2>
+    <p>The initial target is an NVIDIA Jetson AGX platform running llama.cpp. Exact board model, memory capacity, power mode, clocks, cooling conditions, and software revisions will be reported for each measured configuration. The initial model is Qwen2.5-1.5B-Instruct; Llama-3.2-1B-Instruct is planned as a cross-family evaluation. Adapter compatibility is checked against the exact base model and recorded per run.</p>
+    <p>Comparisons use the same request inputs and order, model precision, tokenizer, prompt template, generation settings, physical-memory budget, and maximum background-work budget. JetPack, CUDA, driver, operating system, llama.cpp revision, compiler flags, model versions, adapter versions, and decoding parameters are pinned in the environment manifest. Planned configurations are not treated as verified platform support until the corresponding runs complete.</p>
+    <p>We compare against no reuse, exact same-LoRA prefix reuse, demand-only preparation, adapter-only preload, and relevant KV compression or cache policies. Reimplementations of related mechanisms are identified as such. Baselines that do not support a feature are not given an artificial advantage through a different request sequence or resource budget.</p>
+
+    <h2 id="prediction">Prediction and Preparation</h2>
+    <p>Prediction is evaluated using only history visible at the decision time. Methods include stay, LRU, popularity/LFU, Markov, context-aware, short-history GRU, and relation-fusion predictors. Training seeds, history windows, and candidate counts are selected using validation data and then fixed for the test period. Time-order and user-boundary checks guard against future leakage.</p>
+    <p>We report Top-k accuracy and mean reciprocal rank alongside the service-relevant preparation funnel: predicted adapter, known-session match, legal exact-prefix match, valid recovery dependencies, readiness before arrival, and actual consumption by the matching request. We also measure predictor latency and memory, unused or expired preparation, cancellation, and interference with foreground requests.</p>
+    <p>Comparisons include demand-only preparation, adapter-only preload, and adapter preload with legal historical-KV preparation. Candidate count, preparation window, return interval, and prediction errors are varied under a fixed background-work budget. A predicted adapter is not counted as a KV hit; new request text that has not yet arrived is not treated as known input.</p>
+
+    <h2 id="kv-representation">Cross-LoRA KV Representation</h2>
+    <p>For the same model and exact prefix, a target adapter's KV state may be represented relative to an anchor adapter. We compare complete KV storage, direct KV quantization, and anchor-delta representations. Grouping strategies and anchor selection are evaluated using training or calibration data only; test data is not used to create groups or choose anchors.</p>
+    <p>Measurements include separate key and value reconstruction errors, bytes for the complete family including metadata, first-construction time, restoration time, temporary peak memory, recovery failures, and downstream output quality. First construction is charged for the target KV and any extra prefill required. Comparisons use compatible adapters and identical prefix tokens. Similarity metrics alone are not treated as evidence of equivalent task quality.</p>
+    <p>Grouping and anchor ablations vary the grouping method, anchor choice, adapter-pair sampling, and delta precision while holding the request workload and memory budget fixed. Both storage savings and the end-to-end cost of recovering a usable target KV are reported.</p>
+
+    <h2 id="kv-management">KV Management Policies</h2>
+    <p>We compare complete-KV retention, block-level eviction, leaf eviction, session-path management, anchor-family dependency management, and joint policies where applicable. The comparison holds total physical memory and request order constant. Shared parent data is counted once; metadata, conversion buffers, and restoration peaks are included.</p>
+    <p>Measurements include usable continuous-prefix coverage, bytes actually released, number of recoverable sessions, dependency violations, restoration latency, temporary memory peak, and request-level TTFT. Ablations remove or vary prediction, frequency, dependency impact, prefix depth, and preparation-cost signals. Dependency and version checks remain enabled for all valid policies.</p>
+    <p>We include cases where a relatively cold anchor supports several frequently used descendants, as well as cases where retaining a whole family costs more than recomputation. This exposes whether a policy's apparent hit rate translates into usable state under a fixed physical-memory budget.</p>
+
+    <h2 id="background-execution">Background Execution</h2>
+    <p>Background work includes delta construction, KV restoration, and layer-wise prefetch. We first isolate kernel fusion, multi-layer task organization, and transfer behavior in local microbenchmarks. Integrated tests compare serial execution, stream-based execution, layer-wise recovery, load-aware deferral, and adapter-aware batching.</p>
+    <p>Experiments cover idle, prefill-heavy, decode-heavy, and bursty foreground load. CUDA-event timelines are paired with host wall-clock measurements to account for synchronization, waiting, memory-bandwidth contention, and foreground slowdown. We report background backlog, cancellation, memory peaks, and energy as well as the fraction of work that overlaps in time. Stream priority alone is not assumed to guarantee preemption or interference-free execution.</p>
+
+    <h2 id="end-to-end">End-to-End Evaluation and Ablations</h2>
+    <p>End-to-end replay evaluates sequential conversations and parallel document tasks under representative physical-memory budgets. Main outcomes are request-level TTFT and ITL distributions, throughput, usable KV reuse, peak physical memory, energy, failures, and service-level objective outcomes. Results are paired by workload and run wherever the comparison permits.</p>
+    <p>System ablations remove prediction, cross-LoRA KV compression, dependency-aware eviction, and asynchronous execution separately, then examine interactions among them. Stress tests vary adapter count, context length, return distance, switch probability, arrival rate, prediction quality, and preparation budget. Low-reuse and incorrect-prediction cases are included to measure when preparation should be skipped or cancelled.</p>
+    <p>Independent process replays and predictor training seeds are recorded separately. Representative configurations use at least three replays and three predictor seeds initially; repetition may be increased based on measured variability. Uncertainty is assessed at the user, trace, or independent-run level, rather than treating correlated requests as independent users.</p>
+
+    <h2 id="quality-energy">Quality, Energy, and Correctness</h2>
+    <p>Restored or compressed KV states are compared with the same target adapter's original full-KV execution. We report logit-level differences where available, task-quality measures, and output checks with tolerances defined before evaluation. Non-significance alone is not treated as evidence of equivalence.</p>
+    <p>Energy experiments specify whether foreground work, background preparation, idle periods, and waiting are included. Sustained runs record power, temperature, backlog, leaks, errors, and completion outcomes. Directed correctness tests cover adapter or model version changes, anchor eviction, cancellation, prefix mismatch, bursty requests, and buffer synchronization.</p>
+
+    <h2 id="artifacts">Experimental Artifacts</h2>
+    <p>Materials are released only after their inputs, versions, permissions, and outputs have been checked. At present, the repository provides experiment documentation, a <a href="data/schema.csv" download>request-field schema</a>, an <a href="configs/environment-template.json" download>environment metadata template</a>, and <a href="reproduction.html">detailed reproduction requirements</a>. The schema is a field dictionary, not a request trace; the JSON file is a metadata template, not a runnable configuration.</p>
+    <p>Request traces, executable implementation, checkpoints, measured result files, and plotting scripts are not included in this initial version. No end-to-end performance gain or successful reproduction is claimed here. Each artifact will be linked only when the corresponding release is available.</p>
+
+    <footer class="site-footer">
+      <span>ReLoKV experimental materials.</span>
+      <a href="#content">Back to top</a>
+    </footer>
+  </main>
+</body>
+</html>
